@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AskDB - AI Database Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; background: #343541; color: #ffffff; height: 100vh; overflow: hidden; }
+        .chat-container { display: flex; flex-direction: column; height: 100vh; }
+        .header { background: #202123; padding: 1rem 1.5rem; border-bottom: 1px solid #4d4d4f; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 1.25rem; font-weight: 600; color: #ffffff; }
+        .header-actions { display: flex; gap: 0.5rem; align-items: center; }
+        .btn { padding: 0.5rem 1rem; border: 1px solid #4d4d4f; background: transparent; color: #ffffff; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem; transition: all 0.2s; }
+        .btn:hover { background: #4d4d4f; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+        .message { display: flex; gap: 0.75rem; max-width: 100%; }
+        .message.user { flex-direction: row-reverse; }
+        .message-avatar { width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; flex-shrink: 0; }
+        .message.user .message-avatar { background: #10a37f; }
+        .message.assistant .message-avatar { background: #444654; }
+        .message-content { background: #444654; padding: 1rem; border-radius: 0.75rem; max-width: 80%; word-wrap: break-word; }
+        .message.user .message-content { background: #10a37f; }
+        .message-text { line-height: 1.5; }
+        .message-text pre { background: rgba(0, 0, 0, 0.2); padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.5rem 0; }
+        .message-text code { background: rgba(0, 0, 0, 0.2); padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
+        .message-meta { font-size: 0.75rem; color: #8e8ea0; margin-top: 0.5rem; display: flex; gap: 1rem; align-items: center; }
+        .copy-btn { background: #444654; border: 1px solid #4d4d4f; color: #fff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; font-size: 0.75rem; }
+        .copy-btn:hover { background: #4d4d4f; }
+        .copy-btn.copied { background: #10a37f; }
+        .results-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.875rem; }
+        .results-table th, .results-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #4d4d4f; }
+        .results-table th { background: #2b2c33; font-weight: 600; }
+        .results-table tr:hover { background: rgba(255,255,255,0.05); }
+        .pagination-info { font-size: 0.75rem; color: #8e8ea0; margin-top: 0.5rem; }
+        .error-message { background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 0.75rem; border-radius: 0.25rem; margin-top: 0.5rem; }
+        .column-suggestions { margin-top: 0.75rem; padding: 0.75rem; background: rgba(16, 163, 127, 0.1); border-left: 3px solid #10a37f; border-radius: 0.25rem; }
+        .column-suggestions-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #10a37f; }
+        .column-suggestion-item { font-size: 0.8rem; padding: 0.25rem 0; color: #d1d5db; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
+        .column-suggestion-item:hover { color: #10a37f; cursor: pointer; }
+        .query-suggestions { margin-top: 0.75rem; padding: 0.75rem; background: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; border-radius: 0.25rem; }
+        .query-suggestions-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: #3b82f6; }
+        .query-suggestion-item { font-size: 0.875rem; padding: 0.5rem; margin: 0.25rem 0; background: rgba(59, 130, 246, 0.1); border-radius: 0.375rem; color: #d1d5db; cursor: pointer; transition: all 0.2s; }
+        .query-suggestion-item:hover { background: rgba(59, 130, 246, 0.2); color: #3b82f6; transform: translateX(4px); }
+        .welcome-message { text-align: center; padding: 2rem; color: #8e8ea0; }
+        .welcome-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; color: #ffffff; }
+        .quick-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
+        .quick-action { background: #444654; border: 1px solid #4d4d4f; color: #ffffff; padding: 0.75rem 1rem; border-radius: 0.5rem; cursor: pointer; font-size: 0.875rem; transition: all 0.2s; }
+        .quick-action:hover { background: #4d4d4f; }
+        .input-container { background: #202123; padding: 1rem 1.5rem; border-top: 1px solid #4d4d4f; display: flex; gap: 0.75rem; align-items: flex-end; }
+        .input-wrapper { flex: 1; position: relative; }
+        .question-input { width: 100%; background: #40414f; border: 1px solid #4d4d4f; color: #ffffff; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 1rem; resize: none; min-height: 2.5rem; max-height: 8rem; font-family: inherit; }
+        .question-input:focus { outline: none; border-color: #10a37f; }
+        .send-button { background: #10a37f; border: none; color: #ffffff; padding: 0.75rem; border-radius: 0.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; min-width: 2.5rem; }
+        .send-button:hover { background: #0d8a6b; }
+        .loading { display: none; align-items: center; gap: 0.5rem; color: #8e8ea0; font-size: 0.875rem; }
+        .loading.show { display: flex; }
+
+        /* Modal styles */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+        .modal-overlay.show { display: flex; }
+        .modal { width: min(800px, 92vw); max-height: 80vh; background: #202123; color: #fff; border: 1px solid #4d4d4f; border-radius: 0.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.4); overflow: hidden; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #4d4d4f; }
+        .modal-title { font-weight: 600; }
+        .modal-close { background: transparent; color: #fff; border: 1px solid #4d4d4f; border-radius: 0.375rem; padding: 0.25rem 0.5rem; cursor: pointer; }
+        .modal-body { padding: 1rem; overflow: auto; max-height: calc(80vh - 56px); }
+        .kv { opacity: 0.9; font-size: 0.9rem; margin: 0.25rem 0; }
+        .modal pre { background: #2b2c33; padding: 0.75rem; border-radius: 0.5rem; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="header">
+            <h1>🗄️ AskDB - AI Database Assistant</h1>
+            <div class="header-actions">
+                <button class="btn" id="newSessionBtn" onclick="startNewSession()">🆕 New Session</button>
+                <button class="btn" id="endSessionBtn" onclick="endSession()" style="display:none;">🔚 End Session</button>
+                <button class="btn" onclick="clearChat()">🗑️ Clear Chat</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <div class="welcome-title">Welcome to AskDB</div>
+                <div class="welcome-subtitle">Ask questions about your database in natural language</div>
+                <div class="quick-actions"></div>
+            </div>
+        </div>
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea id="questionInput" class="question-input" placeholder="Ask a question about your database..." rows="1"></textarea>
+            </div>
+            <button id="sendButton" class="send-button" onclick="sendMessage()">Send</button>
+        </div>
+        <div class="loading" id="loadingIndicator">
+            <span>AskDB is thinking</span>
+        </div>
+    </div>
+    <script>
+        let isLoading = false;
+        function askQuestion(question) {
+            document.getElementById('questionInput').value = question;
+            sendMessage();
+        }
+        function sendMessage() {
+            const input = document.getElementById('questionInput');
+            const question = input.value.trim();
+            if (!question || isLoading) return;
+            addMessage(question, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+            setLoading(true);
+            fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) })
+                .then(r => r.json())
+                .then(data => {
+                    setLoading(false);
+                    const sql = (data && data.sql) ? data.sql : 'Not available';
+                    const rows = (data && Array.isArray(data.rows)) ? data.rows : [];
+                    // Format rows for preview in modal (show first 20 rows)
+                    const rowsPreview = rows.length ? JSON.stringify(rows.slice(0, 20), null, 2) : 'No rows to display.';
+                    const executionTime = data && data.execution_time ? data.execution_time : null;
+                    const totalRows = data && data.total_rows !== undefined ? data.total_rows : rows.length;
+                    const rowsShown = data && data.rows_shown !== undefined ? data.rows_shown : rows.length;
+                    const hasMore = data && data.has_more ? data.has_more : false;
+                    const columnSuggestions = data && data.column_suggestions ? data.column_suggestions : [];
+                    const querySuggestions = data && data.query_suggestions ? data.query_suggestions : [];
+                    const message = data && data.error ? ('Error: ' + data.error) : (data && data.answer ? data.answer : '');
+                    addMessage(message, 'assistant', { 
+                        sql, 
+                        rowsPreview, 
+                        rows, 
+                        executionTime, 
+                        totalRows, 
+                        rowsShown, 
+                        hasMore,
+                        columnSuggestions,
+                        querySuggestions,
+                        error: data && data.error ? data.error : null
+                    });
+                    // Update session buttons (show End Session after first message)
+                    updateSessionButtons(true);
+                })
+                .catch(err => { 
+                    setLoading(false); 
+                    addMessage('Error: ' + err.message, 'assistant', { 
+                        error: err.message,
+                        sql: '',
+                        rowsPreview: '',
+                        rows: []
+                    }); 
+                });
+        }
+        function addMessage(text, sender, details) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+            if (welcomeMessage) welcomeMessage.remove();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            const avatar = sender === 'user' ? '👤' : '🤖';
+            
+            // Build meta information (execution time, row count, etc.)
+            let metaInfo = '';
+            if (sender === 'assistant' && details) {
+                const metaParts = [];
+                if (details.executionTime !== null && details.executionTime !== undefined) {
+                    metaParts.push(`⏱️ ${details.executionTime}s`);
+                }
+                if (details.totalRows !== undefined) {
+                    metaParts.push(`📊 ${details.totalRows} row${details.totalRows !== 1 ? 's' : ''}`);
+                    if (details.hasMore) {
+                        metaParts.push(`(showing ${details.rowsShown})`);
+                    }
+                }
+                if (metaParts.length > 0) {
+                    metaInfo = `<div class="message-meta">${metaParts.join(' • ')}</div>`;
+                }
+            }
+            
+            // Copy SQL button
+            const copyButton = (sender === 'assistant' && details && details.sql) ? 
+                `<button class="copy-btn" onclick="copySQLFromButton(this)">📋 Copy SQL</button>` : '';
+            
+            // Info button - always show for assistant messages if we have SQL or rows
+            let infoButton = '';
+            if (sender === 'assistant' && details && (details.sql || (details.rows && details.rows.length > 0))) {
+                infoButton = `<button class="btn info-btn" style="margin-left:8px; padding:2px 6px; font-size:0.75rem;" onclick="openDetailsFromMessage(this)">i</button>`;
+            }
+            
+            // Error message display
+            let errorDisplay = '';
+            if (details && details.error) {
+                errorDisplay = `<div class="error-message">${escapeHtml(details.error)}</div>`;
+            }
+            
+            // Column suggestions
+            let columnSuggestionsDisplay = '';
+            if (sender === 'assistant' && details && details.columnSuggestions && Array.isArray(details.columnSuggestions) && details.columnSuggestions.length > 0 && !details.error) {
+                columnSuggestionsDisplay = formatColumnSuggestions(details.columnSuggestions);
+            }
+            
+            // Query suggestions
+            let querySuggestionsDisplay = '';
+            if (sender === 'assistant' && details && details.querySuggestions && Array.isArray(details.querySuggestions) && details.querySuggestions.length > 0 && !details.error) {
+                querySuggestionsDisplay = formatQuerySuggestions(details.querySuggestions);
+            }
+            
+            // Store SQL and rows data BEFORE setting innerHTML (data attributes persist)
+            if (sender === 'assistant' && details) {
+                // Store as data attributes (convert to string explicitly)
+                // Always set, even if empty, so we can distinguish between "no data" and "not set"
+                const sqlToStore = details.sql ? String(details.sql) : '';
+                const rowsToStore = details.rowsPreview ? String(details.rowsPreview) : '';
+                messageDiv.setAttribute('data-sql', sqlToStore);
+                messageDiv.setAttribute('data-rows', rowsToStore);
+                // Debug: log what we're storing
+                console.log('Storing data for message:', { 
+                    hasSql: !!details.sql, 
+                    sqlLength: sqlToStore.length,
+                    sqlPreview: sqlToStore.substring(0, 50),
+                    hasRows: !!details.rowsPreview,
+                    rowsLength: rowsToStore.length,
+                    rowsPreview: rowsToStore.substring(0, 50)
+                });
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">
+                    <div class="message-text">${formatMessage(text)} ${infoButton} ${copyButton}</div>
+                    ${errorDisplay}
+                    ${columnSuggestionsDisplay}
+                    ${querySuggestionsDisplay}
+                    ${metaInfo}
+                </div>`;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function copySQLFromButton(button) {
+            // Find the parent message element and get SQL from data attribute
+            const messageDiv = button.closest('.message');
+            if (messageDiv) {
+                const sql = messageDiv.getAttribute('data-sql') || '';
+                if (sql) {
+                    copySQL(sql, button);
+                } else {
+                    console.error('No SQL found in message data');
+                }
+            } else {
+                console.error('Could not find parent message element');
+            }
+        }
+        
+        function copySQL(sql, button) {
+            navigator.clipboard.writeText(sql).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '✓ Copied!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy SQL:', err);
+                // Fallback: try using a temporary textarea
+                const textarea = document.createElement('textarea');
+                textarea.value = sql;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    button.textContent = '✓ Copied!';
+                    setTimeout(() => {
+                        button.textContent = '📋 Copy SQL';
+                    }, 2000);
+                } catch (e) {
+                    console.error('Fallback copy failed:', e);
+                }
+                document.body.removeChild(textarea);
+            });
+        }
+        
+        function formatResultsTable(rows, totalRows, hasMore) {
+            if (!rows || rows.length === 0) return '';
+            
+            // Get column names from first row
+            const firstRow = rows[0];
+            let columns = [];
+            if (Array.isArray(firstRow)) {
+                columns = firstRow.map((_, i) => `Column ${i + 1}`);
+            } else if (typeof firstRow === 'object') {
+                columns = Object.keys(firstRow);
+            } else {
+                return `<div class="results-table">${escapeHtml(JSON.stringify(rows, null, 2))}</div>`;
+            }
+            
+            let html = '<div style="margin-top: 0.75rem; overflow-x: auto;"><table class="results-table"><thead><tr>';
+            columns.forEach(col => {
+                html += `<th>${escapeHtml(String(col))}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            const rowsToShow = hasMore ? rows.slice(0, 20) : rows;
+            rowsToShow.forEach(row => {
+                html += '<tr>';
+                if (Array.isArray(row)) {
+                    row.forEach(cell => {
+                        html += `<td>${escapeHtml(String(cell !== null && cell !== undefined ? cell : ''))}</td>`;
+                    });
+                } else if (typeof row === 'object') {
+                    columns.forEach(col => {
+                        html += `<td>${escapeHtml(String(row[col] !== null && row[col] !== undefined ? row[col] : ''))}</td>`;
+                    });
+                } else {
+                    html += `<td>${escapeHtml(String(row))}</td>`;
+                }
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            if (hasMore) {
+                html += `<div class="pagination-info">Showing ${rowsToShow.length} of ${totalRows} rows. Use the details button to see more.</div>`;
+            }
+            html += '</div>';
+            
+            return html;
+        }
+        
+        function escapeForJS(str) {
+            return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+        }
+        
+        function formatColumnSuggestions(suggestions) {
+            if (!suggestions || suggestions.length === 0) return '';
+            let html = '<div class="column-suggestions"><div class="column-suggestions-title">💡 Suggested Columns:</div>';
+            suggestions.forEach(suggestion => {
+                html += `<div class="column-suggestion-item" onclick="useSuggestion('${escapeForJS(suggestion)}')">${escapeHtml(suggestion)}</div>`;
+            });
+            html += '</div>';
+            return html;
+        }
+        
+        function formatQuerySuggestions(suggestions) {
+            if (!suggestions || suggestions.length === 0) return '';
+            let html = '<div class="query-suggestions"><div class="query-suggestions-title">💭 Related Questions:</div>';
+            suggestions.forEach(suggestion => {
+                html += `<div class="query-suggestion-item" onclick="useQuerySuggestion('${escapeForJS(suggestion)}')">${escapeHtml(suggestion)}</div>`;
+            });
+            html += '</div>';
+            return html;
+        }
+        
+        function useSuggestion(suggestion) {
+            // Extract column name (before the parenthesis if present)
+            const columnName = suggestion.split('(')[0].trim();
+            document.getElementById('questionInput').value = columnName;
+            document.getElementById('questionInput').focus();
+        }
+        
+        function useQuerySuggestion(suggestion) {
+            // Use the full suggestion as a new question
+            document.getElementById('questionInput').value = suggestion;
+            document.getElementById('questionInput').focus();
+            // Optionally auto-submit
+            // sendMessage();
+        }
+        function ensureModal(){
+            let overlay = document.getElementById('detailsOverlay');
+            if (!overlay){
+                overlay = document.createElement('div');
+                overlay.id = 'detailsOverlay';
+                overlay.className = 'modal-overlay';
+                overlay.onclick = maybeCloseModal;
+                overlay.innerHTML = `
+                  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detailsTitle">
+                    <div class="modal-header">
+                      <div id="detailsTitle" class="modal-title">Query details</div>
+                      <button class="modal-close" onclick="closeDetails()">Close</button>
+                    </div>
+                    <div class="modal-body">
+                      <div class="kv">SQL used:</div>
+                      <pre><code id="detailsSql"></code></pre>
+                      <div class="kv" style="margin-top:8px;">Rows (preview):</div>
+                      <pre><code id="detailsRows"></code></pre>
+                    </div>
+                  </div>`;
+                document.body.appendChild(overlay);
+            }
+        }
+        function openDetailsFromMessage(button) {
+            // Find the parent message element
+            const messageDiv = button.closest('.message');
+            if (messageDiv) {
+                // Get data from attributes (more reliable than dataset)
+                const sql = messageDiv.getAttribute('data-sql');
+                const rows = messageDiv.getAttribute('data-rows');
+                // Debug logging
+                console.log('Opening details:', { sql: sql ? sql.substring(0, 50) + '...' : 'empty', rows: rows ? rows.substring(0, 50) + '...' : 'empty' });
+                openDetailsSafe(sql || 'Not available', rows || 'No rows to display.');
+            } else {
+                console.error('Could not find parent message element');
+            }
+        }
+        
+        function openDetailsSafe(sql, rows){
+            ensureModal();
+            const sqlEl = document.getElementById('detailsSql');
+            const rowsEl = document.getElementById('detailsRows');
+            if (sqlEl) sqlEl.textContent = sql || 'Not available';
+            if (rowsEl) rowsEl.textContent = rows || 'No rows to display.';
+            const overlay = document.getElementById('detailsOverlay');
+            if (overlay) overlay.classList.add('show');
+        }
+        
+        function openDetails(sqlEnc, rowsEnc){
+            // Legacy function for backward compatibility
+            const sql = decodeURIComponent(sqlEnc || '');
+            const rows = decodeURIComponent(rowsEnc || '');
+            openDetailsSafe(sql, rows);
+        }
+        function closeDetails(){
+            document.getElementById('detailsOverlay').classList.remove('show');
+        }
+        function maybeCloseModal(e){
+            if (e.target.id === 'detailsOverlay') closeDetails();
+        }
+        function escapeHtml(str){
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+        }
+        function clearChat(){
+            // Clear only frontend display (keeps server session)
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = `
+                <div class="welcome-message">
+                    <div class="welcome-title">Welcome to AskDB</div>
+                    <div class="welcome-subtitle">Ask questions about your database in natural language</div>
+                    <div class="quick-actions">
+                        <div class="quick-action" onclick="askQuestion('How many contacts are there?')">How many contacts are there?</div>
+                        <div class="quick-action" onclick="askQuestion('Show me all customers from California')">Show me all customers from California</div>
+                        <div class="quick-action" onclick="askQuestion('What are the top 5 products by sales?')">What are the top 5 products by sales?</div>
+                        <div class="quick-action" onclick="askQuestion('List all pending cases')">List all pending cases</div>
+                    </div>
+                </div>`;
+        }
+        
+        function startNewSession(){
+            if(confirm('Start a new session? This will clear all conversation history on the server.')){
+                fetch('/api/session/clear', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if(data.success){
+                            clearChat();
+                            updateSessionButtons(false);
+                            console.log('✅ New session started - conversation history cleared');
+                        } else {
+                            alert('Error starting new session: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error:', err);
+                        alert('Error starting new session');
+                    });
+            }
+        }
+        
+        function endSession(){
+            if(confirm('End current session? This will clear all conversation history on the server. You can start a new session anytime.')){
+                fetch('/api/session/clear', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if(data.success){
+                            clearChat();
+                            updateSessionButtons(false);
+                            console.log('🔚 Session ended - conversation history cleared');
+                        } else {
+                            alert('Error ending session: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error:', err);
+                        alert('Error ending session');
+                    });
+            }
+        }
+        
+        function updateSessionButtons(hasHistory){
+            const newSessionBtn = document.getElementById('newSessionBtn');
+            const endSessionBtn = document.getElementById('endSessionBtn');
+            if(hasHistory){
+                newSessionBtn.style.display = 'none';
+                endSessionBtn.style.display = 'inline-block';
+            } else {
+                newSessionBtn.style.display = 'inline-block';
+                endSessionBtn.style.display = 'none';
+            }
+        }
+        
+        function checkSessionStatus(){
+            fetch('/api/session/status', { method: 'GET' })
+                .then(r => r.json())
+                .then(data => {
+                    if(data.active && data.has_history){
+                        updateSessionButtons(true);
+                    } else {
+                        updateSessionButtons(false);
+                    }
+                })
+                .catch(err => console.error('Error checking session:', err));
+        }
+        function formatMessage(text) {
+            text = text.replace(/```sql\n([\s\S]*?)\n```/g, '<pre><code>$1</code></pre>');
+            text = text.replace(/```\n([\s\S]*?)\n```/g, '<pre><code>$1</code></pre>');
+            text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+            text = text.replace(/\n/g, '<br>');
+            return text;
+        }
+        function setLoading(loading) {
+            isLoading = loading;
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const sendButton = document.getElementById('sendButton');
+            if (loading) { loadingIndicator.classList.add('show'); sendButton.disabled = true; }
+            else { loadingIndicator.classList.remove('show'); sendButton.disabled = false; }
+        }
+        document.getElementById('questionInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 8 * 16) + 'px';
+        });
+        document.getElementById('questionInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+        window.onload = function() { 
+            document.getElementById('questionInput').focus();
+            checkSessionStatus(); // Check session status on page load
+        };
+    </script>
+</body>
+</html>
+
+

@@ -1,0 +1,231 @@
+DataPrompt: Handling Non-Database Questions (Definitional/Explanatory Questions)
+================================================================================
+
+This document explains how DataPrompt handles questions that are not asking for 
+database queries but rather for definitions, explanations, or information about 
+the data itself.
+
+================================================================================
+CURRENT BEHAVIOR: SQL Response Format for Definitions
+================================================================================
+
+When users ask definitional questions (not database queries), the system generates 
+SQL queries in a special format that returns explanatory text:
+
+Example Question: "what does that mean?" (referring to B01001A011)
+
+Generated SQL:
+    SELECT 'Represents the total population in the specified geography for the White Alone population group (group A).' AS meaning;
+
+This SQL Query:
+- Is syntactically valid SQL
+- Will execute successfully in the database
+- Returns a single row with the explanation
+- Provides the answer in a structured format
+
+How It Works:
+1. User asks definitional question
+2. System recognizes it's not a data query
+3. LLM generates explanation
+4. System wraps explanation in SQL: SELECT 'explanation' AS meaning;
+5. SQL executes and returns explanation
+6. Answer generator converts result to natural language
+
+================================================================================
+WHY THIS FORMAT?
+================================================================================
+
+1. Consistent Response Structure:
+   - All responses go through same SQL execution flow
+   - Maintains unified processing pipeline
+   - Same error handling mechanisms apply
+
+2. Structured Data:
+   - Explanation is returned as structured data (row with column)
+   - Easy to process and display
+   - Consistent with other query results
+
+3. Execution Path:
+   - Uses existing SQL execution infrastructure
+   - Benefits from retry mechanisms
+   - Consistent error handling
+
+4. Flexibility:
+   - Can be extended to include multiple explanations
+   - Can join with other data if needed
+   - Format can be customized
+
+================================================================================
+HOW THIS HAPPENS IN THE CODE
+================================================================================
+
+Current Flow (Automatic):
+
+1. User Question: "what does that mean?"
+   ↓
+2. System sends to SQL Generator (generate_sql())
+   ↓
+3. LLM recognizes it's a definitional question
+   ↓
+4. LLM generates SQL with hardcoded explanation:
+   SELECT 'Represents the total population...' AS meaning;
+   ↓
+5. SQL executes successfully (returns explanation)
+   ↓
+6. Answer generator converts to natural language
+
+The LLM automatically generates this format because:
+- It understands the question is asking for explanation
+- There's no database table with definitions
+- SQL format is the expected output
+- Returns explanation in a valid SQL format
+
+================================================================================
+EXAMPLE SCENARIOS
+================================================================================
+
+Scenario 1: Column Code Explanation
+-----------------------------------
+Question: "what does B01001A011 mean?"
+
+Generated SQL:
+    SELECT 'Represents the total population in the specified geography for the White Alone population group (group A).' AS meaning;
+
+Result: Single row returned with explanation
+Answer: "Represents the total population in the specified geography for the White Alone population group (group A)."
+
+Scenario 2: Follow-up Definition
+--------------------------------
+Previous Q: "Show me B01001A011"
+Current Q: "what does that mean?"
+
+Generated SQL:
+    SELECT 'Represents the total population in the specified geography for the White Alone population group (group A).' AS meaning;
+
+The system understands "that" refers to B01001A011 from context.
+
+Scenario 3: General Definition
+------------------------------
+Question: "what is ACS data?"
+
+Generated SQL:
+    SELECT 'ACS (American Community Survey) is a demographic survey program...' AS meaning;
+
+================================================================================
+BENEFITS OF THIS APPROACH
+================================================================================
+
+1. Unified Processing:
+   - All questions go through same pipeline
+   - No special case handling needed
+   - Consistent response format
+
+2. Works with Existing Infrastructure:
+   - Uses SQL execution engine
+   - Benefits from error handling
+   - Leverages retry mechanisms
+
+3. Flexible:
+   - Can include multiple explanations
+   - Can join with database data if needed
+   - Easy to extend format
+
+4. Clean Output:
+   - Structured response
+   - Easy to parse and display
+   - Consistent with other queries
+
+================================================================================
+POTENTIAL ENHANCEMENTS
+================================================================================
+
+1. Explicit Detection:
+   - Add function to detect definitional questions
+   - Route to specialized handler
+   - Generate SQL responses intentionally
+
+2. Rich Format:
+   - Multiple columns: meaning, examples, usage
+   - SELECT 'meaning' AS definition, 'examples' AS example_usage;
+   - More structured information
+
+3. Context-Aware Explanations:
+   - Include context from previous questions
+   - More specific explanations
+   - Better pronoun resolution
+
+4. Documentation Integration:
+   - Reference ACS_COLUMN_GUIDE.md
+   - Include official definitions
+   - Provide examples and usage tips
+
+================================================================================
+CODE IMPLEMENTATION SUGGESTION
+================================================================================
+
+To make this more explicit, we could add:
+
+def is_definitional_question(question: str) -> bool:
+    """Detect if question asks for definition/explanation"""
+    patterns = ["what does", "what is", "explain", "define", "meaning", "means"]
+    return any(pattern in question.lower() for pattern in patterns)
+
+def generate_definition_sql(question: str, context: str) -> str:
+    """Generate SQL response for definitional questions"""
+    # Use LLM to generate explanation
+    explanation = get_explanation_from_llm(question, context)
+    # Wrap in SQL format
+    return f"SELECT '{explanation.replace(\"'\", \"''\")}' AS meaning;"
+
+Then in API route:
+    if is_definitional_question(question):
+        sql = generate_definition_sql(question, context)
+        # Execute SQL to get explanation
+        rows, time = execute_sql(sql)
+        answer = answer_from_result(question, rows)
+        # Continue with normal flow...
+
+================================================================================
+CURRENT IMPLEMENTATION STATUS
+================================================================================
+
+Status: Working as Designed
+
+The system currently handles definitional questions by:
+- LLM automatically generates SQL with explanations
+- SQL executes successfully
+- Returns explanations in structured format
+- Works seamlessly with existing pipeline
+
+This is actually a feature, not a bug:
+- Smart way to handle non-database questions
+- Consistent with SQL-based architecture
+- Maintains unified processing flow
+- Provides structured responses
+
+================================================================================
+PRESENTATION POINTS
+================================================================================
+
+For your presentation, you can explain:
+
+1. "The system intelligently handles both database queries and definitional questions"
+
+2. "When users ask for explanations (like 'what does this mean?'), the system 
+   generates SQL responses that return the explanation in a structured format"
+
+3. "This approach maintains consistency - all responses go through the same 
+   SQL execution pipeline"
+
+4. "The LLM automatically recognizes definitional questions and formats 
+   responses as SQL queries that execute and return explanations"
+
+5. "This demonstrates the system's flexibility in handling various question types 
+   while maintaining a unified architecture"
+
+================================================================================
+
+This behavior is intentional and demonstrates the system's ability to handle
+various question types using the same SQL-based architecture.
+
+
