@@ -74,12 +74,12 @@ except Exception as e:
     raise
 
 # Set API keys from environment variables
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "your_google_api_key_here")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "")
 
 # LangChain/LangSmith Configuration
 os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "askdb_project")
-os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "your_langchain_api_key_here")
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 
 # Optional: Set custom LangChain endpoint (default is https://api.smith.langchain.com)
 langchain_endpoint = os.getenv("LANGCHAIN_ENDPOINT")
