@@ -33,13 +33,13 @@ from prompts_config import (
 # Load environment variables from .env file
 load_dotenv()
 
-# Database configuration from environment variables
-db_type = os.getenv("DB_TYPE", "sqlite")
-db_user = os.getenv("DB_USER", "")
+# Database configuration from environment variables (PostgreSQL ogms)
+db_type = os.getenv("DB_TYPE", "postgresql")
+db_user = os.getenv("DB_USER", "postgres")
 db_password = os.getenv("DB_PASSWORD", "")
 db_host = os.getenv("DB_HOST", "localhost")
-db_port = os.getenv("DB_PORT", "3306")
-db_name = os.getenv("DB_NAME", "askdb_local.db")
+db_port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "ogms")
 
 # Construct database URI based on type
 if db_type.lower() == "sqlite":
@@ -248,6 +248,8 @@ class Table(BaseModel):
 
 # table_names = "\n".join(db.get_usable_table_names())
 table_details = get_table_details()
+if "_RUN_FIRST" in table_details:
+    print("⚠️  Run: python generate_table_descriptions.py — then edit database_table_descriptions.csv with your ogms table descriptions.")
 
 # Load table selection prompt from config
 table_details_prompt = ChatPromptTemplate.from_messages(

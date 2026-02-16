@@ -1,141 +1,58 @@
-# AskDB - Natural Language to SQL Query System
+# AskDB – Natural language to SQL (PostgreSQL)
 
-AskDB is an intelligent database querying system that allows users to ask questions in plain English and get answers from any SQL database. The system uses AI/LLM technology to automatically convert natural language questions into SQL queries and provides meaningful responses.
+Ask questions in plain English; get answers from your **PostgreSQL `ogms`** database.
 
-## 🚀 Quick Start
+## What you need
 
-### Prerequisites
 - Python 3.8+
-- Any SQL database (MySQL, PostgreSQL, SQLite, etc.)
-- Google AI API key
-- LangChain API key
+- PostgreSQL with your **ogms** database
+- **Google AI API key** from https://aistudio.google.com/apikey
 
-### Installation
+## Setup (once)
 
-1. **Clone and install dependencies**
+1. **Install dependencies**
    ```bash
-   git clone <repository-url>
-   cd AskDB
    pip install -r requirements.txt
    ```
 
-2. **Set up environment variables**
+2. **Configure `.env`**
    ```bash
-   export GOOGLE_API_KEY="your_google_api_key"
-   export LANGCHAIN_TRACING_V2="true"
-   export LANGCHAIN_PROJECT="your_project_name"
-   export LANGCHAIN_API_KEY="your_langchain_api_key"
+   copy .env.example .env
    ```
+   Edit `.env` and set:
+   - `GOOGLE_API_KEY` = your Google API key
+   - `DB_HOST`, `DB_PORT`, `DB_NAME=ogms`, `DB_USER`, `DB_PASSWORD` for your Postgres
 
-3. **Configure your database**
-   Update the database connection in `untitled0.py`:
-   ```python
-   # For MySQL
-   db = SQLDatabase.from_uri("mysql+pymysql://user:password@host:port/database")
-   
-   # For PostgreSQL
-   db = SQLDatabase.from_uri("postgresql://user:password@host:port/database")
-   
-   # For SQLite
-   db = SQLDatabase.from_uri("sqlite:///path/to/database.db")
-   ```
-
-4. **Create your table descriptions**
-   Create `database_table_descriptions.csv`:
-   ```csv
-   table_name,description
-   users,"Contains user information including id, name, email"
-   orders,"Stores order data with order_id, user_id, total_amount"
-   ```
-
-5. **Start the server**
+3. **Generate table descriptions from your ogms DB**
    ```bash
-   python code1.py
+   python generate_table_descriptions.py
    ```
+   This creates/overwrites `database_table_descriptions.csv` with your tables.  
+   Open the CSV and add a short **description** for each table (what it stores, main columns). Save.
 
-### Usage
+## Run
 
-Send questions to the API:
 ```bash
-curl -X POST http://localhost:5000/api \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is the price of 1968 Ford Mustang?"}'
+python code1.py
 ```
 
-**Response:**
-```json
-{
-  "answer": "The price of 1968 Ford Mustang is $95,000."
-}
-```
+Open **http://127.0.0.1:5000** — ask questions in natural language and get answers from ogms.
 
-## 🎯 Key Features
+- **API:** `POST http://localhost:5000/api` with JSON `{"question": "your question?"}`
+- **View data:** http://127.0.0.1:5000/view-data
 
-- **Natural Language Processing**: Ask questions in plain English
-- **Universal Database Support**: Works with any SQL database
-- **AI-Powered Query Generation**: Uses Google Gemini 1.5 Pro
-- **Context Awareness**: Maintains conversation history
-- **Dynamic Learning**: Improves accuracy through example-based learning
-- **Web API**: RESTful API for easy integration
+## Project layout
 
-## 📁 Project Structure
+| File | Purpose |
+|------|--------|
+| `code1.py` | Flask app (UI + API) |
+| `untitled0.py` | DB connection + LangChain/Gemini query engine |
+| `prompts_config.py` | Prompts for SQL generation |
+| `.env` | Your secrets (create from `.env.example`) |
+| `database_table_descriptions.csv` | Table list + descriptions (from `generate_table_descriptions.py`) |
 
-```
-AskDB/
-├── README.md                           # This file - Quick start guide
-├── TECHNICAL.md                        # Advanced AI techniques & implementation
-├── SETUP.md                           # Detailed installation & configuration
-├── API.md                             # Complete API documentation
-├── code1.py                           # Flask API server
-├── untitled0.py                       # AI engine and query processing
-├── test.py                           # MongoDB test file
-├── database_table_descriptions.csv    # Database schema documentation
-└── requirements.txt                   # Python dependencies
-```
+## Troubleshooting
 
-## 🔍 Example Questions
-
-- "List all customers in France with a credit limit over 20,000"
-- "Get the highest payment amount made by any customer"
-- "Show product details for products in the 'Motorcycles' product line"
-- "Find all employees who joined after 2020"
-- "Calculate the total sales for each department"
-
-## 🤖 How It Works
-
-1. **Question Input**: User submits natural language question
-2. **Table Selection**: AI identifies relevant database tables
-3. **Query Generation**: Converts question to SQL using examples
-4. **Query Execution**: Runs SQL against your database
-5. **Answer Formatting**: Returns natural language response
-
-## 📚 Documentation
-
-- **[TECHNICAL.md](TECHNICAL.md)** - Advanced AI techniques, LangChain integration, and implementation details
-- **[SETUP.md](SETUP.md)** - Detailed installation, configuration, and troubleshooting
-- **[API.md](API.md)** - Complete API reference and examples
-
-## 🛡️ Security
-
-- Store API keys securely using environment variables
-- Implement authentication for production use
-- Validate user inputs
-- Use parameterized queries to prevent SQL injection
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-[Add your license information here]
-
-## 🆘 Support
-
-- Create an issue in the repository
-- Check the documentation in the `/docs` folder
-- Review example queries in the codebase
+- **Database connection failed** – Check `DB_*` in `.env` (host, port, user, password, dbname=ogms).
+- **Wrong or no tables** – Run `python generate_table_descriptions.py` again and fix `database_table_descriptions.csv`.
+- **GOOGLE_API_KEY error** – Set it in `.env` and restart the app.

@@ -451,7 +451,7 @@ def view_data():
         from dotenv import load_dotenv
         load_dotenv()
         
-        db_type = os.getenv("DB_TYPE", "sqlite")
+        db_type = os.getenv("DB_TYPE", "postgresql")
         
         if db_type.lower() == "postgresql":
             import psycopg2
@@ -460,7 +460,7 @@ def view_data():
                 port=os.getenv("DB_PORT", "5432"),
                 user=os.getenv("DB_USER", "postgres"),
                 password=os.getenv("DB_PASSWORD", ""),
-                database=os.getenv("DB_NAME", "askdb")
+                database=os.getenv("DB_NAME", "ogms")
             )
             cursor = conn.cursor()
             
@@ -485,8 +485,8 @@ def view_data():
             
             conn.close()
         else:
-            # SQLite fallback
-            conn = sqlite3.connect('askdb_local.db')
+            # SQLite fallback (when DB_TYPE=sqlite)
+            conn = sqlite3.connect(os.getenv("DB_NAME", "askdb_local.db"))
             cursor = conn.cursor()
             
             # Get all table names
