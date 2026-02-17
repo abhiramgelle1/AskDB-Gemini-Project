@@ -348,7 +348,8 @@ def index():
             .then(data => {
                 showLoading(false);
                 if (data.answer !== undefined && data.answer !== null) {
-                    const text = typeof data.answer === 'string' ? data.answer : (data.answer?.content || JSON.stringify(data.answer));
+                    const a = data.answer;
+                    const text = typeof a === 'string' ? a : (a?.text || a?.content || JSON.stringify(a));
                     addMessage(text, 'bot');
                 } else if (data.error) {
                     addMessage('Error: ' + data.error, 'bot');
@@ -434,11 +435,13 @@ def master1():
         # Generate AI response using the chain_code function
         res = chain_code(q, formatted_messages)
 
-        # Ensure answer is always a string for JSON (avoid [object Object] in frontend)
+        # Ensure answer is always a string (extract from LLM dict shape if needed)
         if isinstance(res, str):
             answer_text = res
-        elif isinstance(res, dict) and "content" in res:
-            answer_text = res["content"] if isinstance(res["content"], str) else str(res["content"])
+        elif isinstance(res, dict):
+            answer_text = res.get("text") or res.get("content")
+            if not isinstance(answer_text, str):
+                answer_text = str(answer_text) if answer_text is not None else str(res)
         else:
             answer_text = str(res) if res is not None else "No response generated."
 

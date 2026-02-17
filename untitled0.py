@@ -209,10 +209,16 @@ def format_answer(input_dict: dict) -> str:
         content = response.content
         if isinstance(content, str):
             return content
+        if isinstance(content, dict) and content.get("text"):
+            return content["text"]
         if isinstance(content, list) and content:
             part = content[0]
+            if isinstance(part, dict) and part.get("text"):
+                return part["text"]
             return getattr(part, 'text', part) if hasattr(part, 'text') else str(part)
         return str(content) if content is not None else "No response."
+    if isinstance(response, dict) and response.get("text"):
+        return response["text"]
     return str(response)
 
 rephrase_answer = RunnableLambda(format_answer)
