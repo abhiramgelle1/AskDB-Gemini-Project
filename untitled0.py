@@ -2,11 +2,26 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_community.utilities.sql_database import SQLDatabase
-from langchain.globals import set_llm_cache
-from langchain.cache import InMemoryCache
+try:
+    from langchain_core.globals import set_llm_cache
+    from langchain_core.caches import InMemoryCache
+    set_llm_cache(InMemoryCache())
+except Exception:
+    try:
+        from langchain.globals import set_llm_cache
+        from langchain.cache import InMemoryCache
+        set_llm_cache(InMemoryCache())
+    except Exception:
+        pass  # caching optional
 import os
 import re
-from langchain.chains import create_sql_query_chain
+import warnings
+# Suppress SQLAlchemy cycle warning (e.g. user_roles/users FK); harmless for query generation
+warnings.filterwarnings("ignore", message=".*Cannot correctly sort tables.*unresolvable cycles.*", category=Warning)
+try:
+    from langchain.chains import create_sql_query_chain
+except ModuleNotFoundError:
+    from langchain_classic.chains import create_sql_query_chain
 from langchain_google_genai import ChatGoogleGenerativeAI  # Replace with actual Google Gemini module
 from langchain_community.tools import QuerySQLDatabaseTool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder,FewShotChatMessagePromptTemplate,PromptTemplate
@@ -19,8 +34,7 @@ from typing import List
 import pandas as pd
 from dotenv import load_dotenv
 
-# Enable in-memory caching for LLM responses to reduce latency
-set_llm_cache(InMemoryCache())
+# Enable in-memory caching for LLM responses (optional)
 
 # Import prompts configuration
 from prompts_config import (
@@ -93,16 +107,15 @@ if os.environ["LANGCHAIN_TRACING_V2"].lower() == "true":
 else:
     print("📊 LangChain tracing disabled")
 
-# Initialize Google Gemini LLM
-# Use gemini-2.0-flash which is the latest stable model
-# Optimized for lower latency
+# Initialize Google Gemini LLM (GEMINI_MODEL in .env; gemini-2.0-flash works, gemini-3-flash-preview if quota)
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash", 
+    model=_gemini_model,
     temperature=0,
-    max_retries=1,
-    timeout=15
+    max_retries=2,
+    timeout=30
 )
-print("✅ Google Gemini 2.0 Flash LLM initialized successfully")
+print(f"✅ Google Gemini LLM initialized: {_gemini_model}")
 
 
 
@@ -189,13 +202,18 @@ def format_answer(input_dict: dict) -> str:
     from langchain_core.messages import HumanMessage
     response = llm.invoke([HumanMessage(content=message)])
     
-    # Extract content
-    if hasattr(response, 'content'):
-        return response.content
-    elif isinstance(response, str):
+    # Extract content (always return a string for the API/frontend)
+    if isinstance(response, str):
         return response
-    else:
-        return str(response)
+    if hasattr(response, 'content'):
+        content = response.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list) and content:
+            part = content[0]
+            return getattr(part, 'text', part) if hasattr(part, 'text') else str(part)
+        return str(content) if content is not None else "No response."
+    return str(response)
 
 rephrase_answer = RunnableLambda(format_answer)
 

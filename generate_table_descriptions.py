@@ -21,9 +21,31 @@ except ImportError:
     print("Install: pip install psycopg2-binary")
     raise
 
-conn = psycopg2.connect(
-    host=host, port=port, dbname=dbname, user=user, password=password
-)
+if not password and os.getenv("DB_PASSWORD") is None:
+    print("ERROR: No .env or DB_PASSWORD not set.")
+    print("  1. Copy .env.example to .env:  copy .env.example .env")
+    print("  2. Edit .env and set your Postgres credentials:")
+    print("     DB_USER=your_postgres_username")
+    print("     DB_PASSWORD=your_postgres_password")
+    print("     DB_NAME=ogms")
+    print("     (and DB_HOST if not localhost)")
+    raise SystemExit(1)
+
+try:
+    conn = psycopg2.connect(
+        host=host, port=port, dbname=dbname, user=user, password=password
+    )
+except Exception as e:
+    print("PostgreSQL connection failed:", e)
+    print()
+    print("Check your .env file (copy from .env.example if missing):")
+    print("  DB_HOST=" + host)
+    print("  DB_PORT=" + port)
+    print("  DB_NAME=" + dbname)
+    print("  DB_USER=" + user)
+    print("  DB_PASSWORD=(must be your actual Postgres password)")
+    raise SystemExit(1)
+
 cur = conn.cursor()
 cur.execute("""
     SELECT table_name FROM information_schema.tables

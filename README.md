@@ -56,3 +56,5 @@ Open **http://127.0.0.1:5000** — ask questions in natural language and get ans
 - **Database connection failed** – Check `DB_*` in `.env` (host, port, user, password, dbname=ogms).
 - **Wrong or no tables** – Run `python generate_table_descriptions.py` again and fix `database_table_descriptions.csv`.
 - **GOOGLE_API_KEY error** – Set it in `.env` and restart the app.
+- **429 RESOURCE_EXHAUSTED / quota exceeded** – Free-tier limits reached. In `.env` try `GEMINI_MODEL=gemini-3-flash-preview` (separate quota), or set up billing in [Google AI Studio](https://aistudio.google.com/app/api-keys). See [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+- **404 NOT_FOUND (model not found)** – Some model IDs (e.g. `gemini-1.5-flash-001`) are not available for all keys. Use `GEMINI_MODEL=gemini-2.0-flash` or `gemini-3-flash-preview`.

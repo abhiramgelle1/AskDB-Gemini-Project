@@ -347,8 +347,9 @@ def index():
             .then(response => response.json())
             .then(data => {
                 showLoading(false);
-                if (data.answer) {
-                    addMessage(data.answer, 'bot');
+                if (data.answer !== undefined && data.answer !== null) {
+                    const text = typeof data.answer === 'string' ? data.answer : (data.answer?.content || JSON.stringify(data.answer));
+                    addMessage(text, 'bot');
                 } else if (data.error) {
                     addMessage('Error: ' + data.error, 'bot');
                 }
@@ -433,11 +434,19 @@ def master1():
         # Generate AI response using the chain_code function
         res = chain_code(q, formatted_messages)
 
+        # Ensure answer is always a string for JSON (avoid [object Object] in frontend)
+        if isinstance(res, str):
+            answer_text = res
+        elif isinstance(res, dict) and "content" in res:
+            answer_text = res["content"] if isinstance(res["content"], str) else str(res["content"])
+        else:
+            answer_text = str(res) if res is not None else "No response generated."
+
         # Add AI response to history
-        history.add_ai_message(res)
+        history.add_ai_message(answer_text)
 
         # Return the AI response as JSON
-        return jsonify({"answer": res})
+        return jsonify({"answer": answer_text})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
