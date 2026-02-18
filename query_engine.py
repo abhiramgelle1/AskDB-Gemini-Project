@@ -58,26 +58,26 @@ db_name = os.getenv("DB_NAME", "ogms")
 # Construct database URI based on type
 if db_type.lower() == "sqlite":
     database_uri = f"sqlite:///{db_name}"
-    print(f"🔌 Attempting to connect to SQLite database: {db_name}")
+    print(f"Connecting to SQLite: {db_name}")
 elif db_type.lower() == "postgresql":
     # URL encode the password to handle special characters
     from urllib.parse import quote_plus
     encoded_password = quote_plus(db_password) if db_password else ""
     database_uri = f"postgresql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
-    print(f"🔌 Attempting to connect to PostgreSQL database at: {db_host}:{db_port}/{db_name}")
+    print(f"Connecting to PostgreSQL at {db_host}:{db_port}/{db_name}")
 else:
     # URL encode the password to handle special characters
     from urllib.parse import quote_plus
     encoded_password = quote_plus(db_password) if db_password else ""
     database_uri = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
-    print(f"🔌 Attempting to connect to MySQL database at: {db_host}:{db_port}/{db_name}")
+    print(f"Connecting to MySQL at {db_host}:{db_port}/{db_name}")
 
 try:
     db = SQLDatabase.from_uri(database_uri)
-    print("✅ Database connection successful!")
+    print("Database connection successful.")
 except Exception as e:
-    print(f"❌ Database connection failed: {e}")
-    print("\n📝 Please configure your database in .env file:")
+    print(f"Database connection failed: {e}")
+    print("Configure your database in .env file:")
     if db_type.lower() == "sqlite":
         print("   - DB_NAME=your_database_file.db")
     else:
@@ -92,20 +92,20 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "")
 
 # LangChain/LangSmith Configuration
 os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
-os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "askdb_project")
+os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "askogms_project")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 
 # Optional: Set custom LangChain endpoint (default is https://api.smith.langchain.com)
 langchain_endpoint = os.getenv("LANGCHAIN_ENDPOINT")
 if langchain_endpoint:
     os.environ["LANGCHAIN_ENDPOINT"] = langchain_endpoint
-    print(f"🔗 Using custom LangChain endpoint: {langchain_endpoint}")
+    print(f"Using custom LangChain endpoint: {langchain_endpoint}")
 
 # Check if LangChain tracing is enabled
 if os.environ["LANGCHAIN_TRACING_V2"].lower() == "true":
-    print(f"📊 LangChain tracing enabled - Project: {os.environ['LANGCHAIN_PROJECT']}")
+    print(f"LangChain tracing enabled - Project: {os.environ['LANGCHAIN_PROJECT']}")
 else:
-    print("📊 LangChain tracing disabled")
+    print("LangChain tracing disabled")
 
 # Initialize Google Gemini LLM (GEMINI_MODEL in .env; gemini-2.0-flash works, gemini-3-flash-preview if quota)
 _gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
@@ -116,7 +116,7 @@ llm = ChatGoogleGenerativeAI(
     max_retries=3,  # Increased retries for timeout recovery
     timeout=_llm_timeout
 )
-print(f"✅ Google Gemini LLM initialized: {_gemini_model}")
+print(f"Gemini LLM initialized: {_gemini_model}")
 
 
 
@@ -189,8 +189,6 @@ def format_answer(input_dict: dict) -> str:
     result = input_dict.get("result", "")
     
     # Debug: print what we're receiving
-    print(f"🔍 Debug format_answer - question: {question[:50]}...")
-    print(f"🔍 Debug format_answer - result type: {type(result)}, length: {len(str(result)) if result else 0}")
     
     # If result is empty, provide a default message
     if not result or result.strip() == "":
@@ -280,7 +278,7 @@ class Table(BaseModel):
 # table_names = "\n".join(db.get_usable_table_names())
 table_details = get_table_details()
 if "_RUN_FIRST" in table_details:
-    print("⚠️  Run: python generate_table_descriptions.py — then edit database_table_descriptions.csv with your ogms table descriptions.")
+    print("Run: python generate_table_descriptions.py then edit database_table_descriptions.csv")
 
 # Load table selection prompt from config
 table_details_prompt = ChatPromptTemplate.from_messages(
@@ -353,12 +351,12 @@ def execute_query_with_retry(inputs: dict) -> dict:
     max_retries = 2
     attempt = 0
     
-    print(f"📝 Executing query: {sql_query}")
+    print(f"Executing: {sql_query}")
     
     while attempt < max_retries:
         try:
             result = execute_query.invoke(sql_query)
-            print(f"✅ Query executed successfully on attempt {attempt + 1}")
+            print(f"Query OK (attempt {attempt + 1})")
             # Format result as string for the LLM prompt
             if isinstance(result, list):
                 if len(result) == 0:
@@ -370,15 +368,15 @@ def execute_query_with_retry(inputs: dict) -> dict:
             else:
                 result_str = str(result)
             
-            print(f"📊 Query result: {result_str[:200]}...")  # Debug: show first 200 chars
+            print(f"Query result: {result_str[:200]}...")
             return {**inputs, "result": result_str, "query": sql_query, "error": None}
         except Exception as e:
             error_message = str(e)
-            print(f"⚠️ Query execution failed (attempt {attempt + 1}): {error_message}")
+            print(f"Query failed (attempt {attempt + 1}): {error_message}")
             attempt += 1
             
             if attempt < max_retries:
-                print(f"🔄 Attempting to correct query...")
+                print("Attempting query correction...")
                 # Correct the query using LLM
                 correction_prompt = f"""You are a SQL expert. The following query failed with an error. Analyze the error and provide a CORRECTED query.
 
@@ -402,17 +400,17 @@ Provide ONLY the corrected SQL query, no explanations:"""
                 try:
                     corrected = llm.invoke(correction_prompt)
                     sql_query = clean_sql_query(corrected.content if hasattr(corrected, 'content') else str(corrected))
-                    print(f"🔧 Corrected query: {sql_query}")
+                    print(f"Corrected query: {sql_query}")
                     inputs["query"] = sql_query  # Update the query for next attempt
                 except Exception as correction_error:
                     error_str = str(correction_error)
                     if "DEADLINE_EXCEEDED" in error_str or "timeout" in error_str.lower() or "504" in error_str:
-                        print(f"⏱️ Query correction timed out. Using original query.")
+                        print("Query correction timed out.")
                         break  # Don't retry if correction itself times out
-                    print(f"❌ Error during correction: {correction_error}")
+                    print(f"Correction error: {correction_error}")
                     break
             else:
-                print(f"❌ All retry attempts exhausted")
+                print("All retries exhausted")
                 # Return error in a format the answer chain can handle
                 error_response = f"""Query execution failed after {max_retries} attempts.
 
@@ -462,11 +460,11 @@ def chain_code(q, m=None):
     if m is None:
         m = []
     
-    print(f"🤖 Processing question: {q}")
+    print(f"Processing: {q[:60]}...")
     
     # For simple queries, skip table selection to save ~30% latency
     if is_simple_query(q):
-        print("⚡ Using fast path (skipping table selection)")
+        print("Using fast path (no table selection)")
         fast_chain = (
             RunnablePassthrough.assign(query=generate_query | RunnableLambda(clean_sql_query)) |
             RunnableLambda(execute_query_with_retry) |

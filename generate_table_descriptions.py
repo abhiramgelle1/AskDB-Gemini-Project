@@ -1,7 +1,7 @@
 """
-Generate database_table_descriptions.csv from your PostgreSQL ogms database.
-Run once: python generate_table_descriptions.py
-Then edit the CSV and add a short description for each table (what it stores, main columns).
+AskOGMS: generate database_table_descriptions.csv from PostgreSQL.
+Run: python generate_table_descriptions.py
+Then edit the CSV and add a short description for each table.
 """
 import os
 import csv
@@ -62,4 +62,4 @@ with open(out, "w", newline="", encoding="utf-8") as f:
     for t in tables:
         w.writerow([t, "Describe this table (columns, purpose)."])
 
-print(f"Wrote {out} with {len(tables)} tables. Edit the description column for each table, then run: python code1.py")
+print(f"Wrote {out} with {len(tables)} tables. Edit the description column, then run: python app.py")

@@ -1,6 +1,6 @@
 """
-AskDB Prompts Configuration
-This file contains all the prompts used by the AI system to generate SQL queries and responses.
+AskOGMS prompts configuration.
+Prompts used for SQL generation and responses.
 """
 
 # =============================================================================
