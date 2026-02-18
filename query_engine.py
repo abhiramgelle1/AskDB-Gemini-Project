@@ -109,11 +109,12 @@ else:
 
 # Initialize Google Gemini LLM (GEMINI_MODEL in .env; gemini-2.0-flash works, gemini-3-flash-preview if quota)
 _gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_llm_timeout = int(os.getenv("GEMINI_TIMEOUT", "90"))  # Default 90s for complex queries
 llm = ChatGoogleGenerativeAI(
     model=_gemini_model,
     temperature=0,
-    max_retries=2,
-    timeout=30
+    max_retries=3,  # Increased retries for timeout recovery
+    timeout=_llm_timeout
 )
 print(f"✅ Google Gemini LLM initialized: {_gemini_model}")
 
@@ -198,9 +199,15 @@ def format_answer(input_dict: dict) -> str:
     # Format the prompt message
     message = ANSWER_GENERATION_PROMPT.format(question=question, result=result)
     
-    # Get LLM response - create a message object
+    # Get LLM response - create a message object (with timeout handling)
     from langchain_core.messages import HumanMessage
-    response = llm.invoke([HumanMessage(content=message)])
+    try:
+        response = llm.invoke([HumanMessage(content=message)])
+    except Exception as e:
+        error_str = str(e)
+        if "DEADLINE_EXCEEDED" in error_str or "timeout" in error_str.lower() or "504" in error_str:
+            return f"The query took too long to process. The database query returned: {result}. Please try rephrasing your question or breaking it into smaller parts."
+        raise  # Re-raise other errors
     
     # Extract content (always return a string for the API/frontend)
     if isinstance(response, str):
@@ -398,6 +405,10 @@ Provide ONLY the corrected SQL query, no explanations:"""
                     print(f"🔧 Corrected query: {sql_query}")
                     inputs["query"] = sql_query  # Update the query for next attempt
                 except Exception as correction_error:
+                    error_str = str(correction_error)
+                    if "DEADLINE_EXCEEDED" in error_str or "timeout" in error_str.lower() or "504" in error_str:
+                        print(f"⏱️ Query correction timed out. Using original query.")
+                        break  # Don't retry if correction itself times out
                     print(f"❌ Error during correction: {correction_error}")
                     break
             else:

@@ -1,60 +1,62 @@
-# AskDB – Natural language to SQL (PostgreSQL)
+# AskDB
 
-Ask questions in plain English; get answers from your **PostgreSQL `ogms`** database.
+Natural language to SQL query system for PostgreSQL databases.
 
-## What you need
+## Setup
 
-- Python 3.8+
-- PostgreSQL with your **ogms** database
-- **Google AI API key** from https://aistudio.google.com/apikey
-
-## Setup (once)
-
-1. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Configure `.env`**
-   ```bash
-   copy .env.example .env
-   ```
-   Edit `.env` and set:
-   - `GOOGLE_API_KEY` = your Google API key
-   - `DB_HOST`, `DB_PORT`, `DB_NAME=ogms`, `DB_USER`, `DB_PASSWORD` for your Postgres
-
-3. **Generate table descriptions from your ogms DB**
-   ```bash
-   python generate_table_descriptions.py
-   ```
-   This creates/overwrites `database_table_descriptions.csv` with your tables.  
-   Open the CSV and add a short **description** for each table (what it stores, main columns). Save.
-
-## Run
-
+1. Install dependencies:
 ```bash
-python code1.py
+pip install -r requirements.txt
 ```
 
-Open **http://127.0.0.1:5000** — ask questions in natural language and get answers from ogms.
+2. Configure `.env`:
+```bash
+cp .env.example .env
+```
 
-- **API:** `POST http://localhost:5000/api` with JSON `{"question": "your question?"}`
-- **View data:** http://127.0.0.1:5000/view-data
+Edit `.env` with your settings:
+- `GOOGLE_API_KEY` - Required. Get from https://aistudio.google.com/apikey
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` - PostgreSQL connection
+- `GEMINI_MODEL` - Model name (default: `gemini-2.0-flash`)
+- `GEMINI_TIMEOUT` - Timeout in seconds (default: 90)
 
-## Project layout
+3. Generate table descriptions:
+```bash
+python generate_table_descriptions.py
+```
 
-| File | Purpose |
-|------|--------|
-| `code1.py` | Flask app (UI + API) |
-| `untitled0.py` | DB connection + LangChain/Gemini query engine |
-| `prompts_config.py` | Prompts for SQL generation |
-| `.env` | Your secrets (create from `.env.example`) |
-| `database_table_descriptions.csv` | Table list + descriptions (from `generate_table_descriptions.py`) |
+Edit `database_table_descriptions.csv` and add descriptions for each table.
+
+4. Run:
+```bash
+python app.py
+```
+
+Open http://127.0.0.1:5000
+
+## API
+
+POST `/api` with JSON body:
+```json
+{"question": "your question"}
+```
+
+Returns:
+```json
+{"answer": "response text"}
+```
+
+## Files
+
+- `app.py` - Flask web server
+- `query_engine.py` - Core query processing logic
+- `prompts_config.py` - LLM prompts
+- `generate_table_descriptions.py` - Generate table descriptions CSV
+- `database_table_descriptions.csv` - Table metadata (edit after generation)
 
 ## Troubleshooting
 
-- **Database connection failed** – Check `DB_*` in `.env` (host, port, user, password, dbname=ogms).
-- **Wrong or no tables** – Run `python generate_table_descriptions.py` again and fix `database_table_descriptions.csv`.
-- **GOOGLE_API_KEY error** – Set it in `.env` and restart the app.
-- **429 RESOURCE_EXHAUSTED / quota exceeded** – Free-tier limits reached. In `.env` try `GEMINI_MODEL=gemini-3-flash-preview` (separate quota), or set up billing in [Google AI Studio](https://aistudio.google.com/app/api-keys). See [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
-- **404 NOT_FOUND (model not found)** – Some model IDs (e.g. `gemini-1.5-flash-001`) are not available for all keys. Use `GEMINI_MODEL=gemini-2.0-flash` or `gemini-3-flash-preview`.
+- **429 RESOURCE_EXHAUSTED** - Quota exceeded. Try `GEMINI_MODEL=gemini-3-flash-preview` or set up billing.
+- **404 NOT_FOUND** - Model not available. Use `gemini-2.0-flash` or `gemini-3-flash-preview`.
+- **504 DEADLINE_EXCEEDED** - Increase `GEMINI_TIMEOUT=120` in `.env`.
+- **Database connection failed** - Check `DB_*` settings in `.env`.
