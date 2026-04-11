@@ -58,23 +58,29 @@ db_name = os.getenv("DB_NAME", "ogms")
 # Construct database URI based on type
 if db_type.lower() == "sqlite":
     database_uri = f"sqlite:///{db_name}"
-    print(f"Connecting to SQLite: {db_name}")
+    print(f"[config] DB_NAME={db_name!r} (SQLite file path or name)")
 elif db_type.lower() == "postgresql":
     # URL encode the password to handle special characters
     from urllib.parse import quote_plus
     encoded_password = quote_plus(db_password) if db_password else ""
     database_uri = f"postgresql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
-    print(f"Connecting to PostgreSQL at {db_host}:{db_port}/{db_name}")
+    print(
+        f"[config] Using PostgreSQL database DB_NAME={db_name!r} at {db_host}:{db_port} "
+        f"(set in .env; default if unset is 'ogms')"
+    )
 else:
     # URL encode the password to handle special characters
     from urllib.parse import quote_plus
     encoded_password = quote_plus(db_password) if db_password else ""
     database_uri = f"mysql+pymysql://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
-    print(f"Connecting to MySQL at {db_host}:{db_port}/{db_name}")
+    print(
+        f"[config] Using MySQL database DB_NAME={db_name!r} at {db_host}:{db_port} "
+        f"(set in .env)"
+    )
 
 try:
     db = SQLDatabase.from_uri(database_uri)
-    print("Database connection successful.")
+    print(f"Database connection successful (active catalog: {db_name!r}).")
 except Exception as e:
     print(f"Database connection failed: {e}")
     print("Configure your database in .env file:")
@@ -171,6 +177,18 @@ def clean_sql_query(text: str) -> str:
     text = re.sub(r'\n\s*\n', '\n', text)
 
     return text
+
+
+def log_and_clean_sql(raw: str) -> str:
+    """Log LLM output, normalize via clean_sql_query, log final SQL (used in LangChain chain)."""
+    raw_preview = raw if len(raw) <= 4000 else raw[:4000] + "\n... [truncated]"
+    print("\n[SQL pipeline] query_engine.log_and_clean_sql — raw LLM SQL (before clean_sql_query)")
+    print(raw_preview)
+    cleaned = clean_sql_query(raw)
+    print("[SQL pipeline] query_engine.clean_sql_query — normalized SQL (string cleanup only; not schema validation)")
+    print(cleaned)
+    print()
+    return cleaned
 
 
 execute_query = QuerySQLDatabaseTool(db=db)
@@ -324,15 +342,7 @@ final_prompt = ChatPromptTemplate.from_messages(
 # from langchain_community.chat_message_histories import ChatMessageHistory
 # history = ChatMessageHistory()
 
-generate_query = create_sql_query_chain(llm, db,final_prompt)
-
-chain = (
-RunnablePassthrough.assign(table_names_to_use=select_table) |
-RunnablePassthrough.assign(query=generate_query | RunnableLambda(clean_sql_query)).assign(
-    result=itemgetter("query") | execute_query
-)
-| rephrase_answer
-)
+generate_query = create_sql_query_chain(llm, db, final_prompt)
 
 
 def execute_query_with_retry(inputs: dict) -> dict:
@@ -350,13 +360,24 @@ def execute_query_with_retry(inputs: dict) -> dict:
     question = inputs.get("question")
     max_retries = 2
     attempt = 0
-    
-    print(f"Executing: {sql_query}")
-    
+
+    print(
+        "[SQL execute] query_engine.execute_query_with_retry — running against DB via "
+        "QuerySQLDatabaseTool -> SQLDatabase.run_no_throw -> SQLAlchemy (errors return as strings; "
+        "no separate static validator beyond DB engine)."
+    )
+
     while attempt < max_retries:
+        print(f"[SQL execute] Attempt {attempt + 1} — query:\n{sql_query}\n")
         try:
             result = execute_query.invoke(sql_query)
-            print(f"Query OK (attempt {attempt + 1})")
+            if isinstance(result, str) and result.lstrip().lower().startswith("error:"):
+                print(
+                    f"[SQL execute] DB error string from run_no_throw (attempt {attempt + 1}): "
+                    f"{result[:800]}{'...' if len(result) > 800 else ''}"
+                )
+            else:
+                print(f"[SQL execute] OK (attempt {attempt + 1})")
             # Format result as string for the LLM prompt
             if isinstance(result, list):
                 if len(result) == 0:
@@ -368,11 +389,12 @@ def execute_query_with_retry(inputs: dict) -> dict:
             else:
                 result_str = str(result)
             
-            print(f"Query result: {result_str[:200]}...")
+            preview = result_str[:500] + ("..." if len(result_str) > 500 else "")
+            print(f"[SQL execute] Result preview: {preview}")
             return {**inputs, "result": result_str, "query": sql_query, "error": None}
         except Exception as e:
             error_message = str(e)
-            print(f"Query failed (attempt {attempt + 1}): {error_message}")
+            print(f"[SQL execute] Failed (attempt {attempt + 1}): {error_message}")
             attempt += 1
             
             if attempt < max_retries:
@@ -400,7 +422,8 @@ Provide ONLY the corrected SQL query, no explanations:"""
                 try:
                     corrected = llm.invoke(correction_prompt)
                     sql_query = clean_sql_query(corrected.content if hasattr(corrected, 'content') else str(corrected))
-                    print(f"Corrected query: {sql_query}")
+                    print("[SQL pipeline] query_engine.clean_sql_query — LLM-corrected query:")
+                    print(sql_query)
                     inputs["query"] = sql_query  # Update the query for next attempt
                 except Exception as correction_error:
                     error_str = str(correction_error)
@@ -430,10 +453,10 @@ This might be because:
 
 # Create the chain with retry logic integrated
 chain = (
-    RunnablePassthrough.assign(table_names_to_use=select_table) |
-    RunnablePassthrough.assign(query=generate_query | RunnableLambda(clean_sql_query)) |
-    RunnableLambda(execute_query_with_retry) |  # Custom retry logic here
-    rephrase_answer
+    RunnablePassthrough.assign(table_names_to_use=select_table)
+    | RunnablePassthrough.assign(query=generate_query | RunnableLambda(log_and_clean_sql))
+    | RunnableLambda(execute_query_with_retry)
+    | rephrase_answer
 )
 
 
@@ -466,9 +489,9 @@ def chain_code(q, m=None):
     if is_simple_query(q):
         print("Using fast path (no table selection)")
         fast_chain = (
-            RunnablePassthrough.assign(query=generate_query | RunnableLambda(clean_sql_query)) |
-            RunnableLambda(execute_query_with_retry) |
-            rephrase_answer
+            RunnablePassthrough.assign(query=generate_query | RunnableLambda(log_and_clean_sql))
+            | RunnableLambda(execute_query_with_retry)
+            | rephrase_answer
         )
         response = fast_chain.invoke({"question": q, "messages": m, "table_details": table_details})
     else:

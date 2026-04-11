@@ -19,7 +19,8 @@ def index():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>AskOGMS</title>
+    <title>AskOGMS — Georgia State University</title>
+    <link rel="icon" href="{{ url_for('static', filename='gsuLogo.png') }}" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -46,6 +47,8 @@ def index():
             color: var(--text);
             line-height: 1.6;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         .bg-canvas {
             position: fixed;
@@ -109,6 +112,46 @@ def index():
             background: rgba(99,102,241,0.08);
             transform: translateY(-1px);
         }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+        .brand-logo {
+            height: 40px;
+            width: auto;
+            max-width: min(200px, 38vw);
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            min-width: 0;
+        }
+        .brand-sub {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+            line-height: 1.2;
+        }
+
+        .site-footer {
+            position: relative;
+            z-index: 10;
+            flex-shrink: 0;
+            text-align: center;
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--surface-border);
+            background: rgba(10,15,26,0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
 
         .main {
             position: relative;
@@ -117,7 +160,8 @@ def index():
             max-width: 900px;
             margin: 0 auto;
             padding: clamp(0.75rem, 2vw, 1.25rem);
-            height: calc(100vh - 56px);
+            flex: 1;
+            min-height: 0;
             display: flex;
             flex-direction: column;
             animation: mainReveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -176,22 +220,18 @@ def index():
             to { opacity: 1; transform: translateY(0); }
         }
         .welcome.hidden { display: none; }
-        .welcome-icon {
-            width: 64px;
-            height: 64px;
+        .welcome-logo {
+            height: 72px;
+            width: auto;
+            max-width: min(280px, 85vw);
+            object-fit: contain;
             margin-bottom: 1.25rem;
-            background: var(--user-bubble);
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.75rem;
-            box-shadow: 0 12px 32px var(--accent-glow);
-            animation: iconBreathe 3s ease-in-out infinite;
+            filter: drop-shadow(0 12px 28px rgba(0,0,0,0.35));
+            animation: welcomeLogoIn 3s ease-in-out infinite;
         }
-        @keyframes iconBreathe {
-            0%, 100% { transform: scale(1); box-shadow: 0 12px 32px var(--accent-glow); }
-            50% { transform: scale(1.02); box-shadow: 0 16px 40px rgba(99,102,241,0.45); }
+        @keyframes welcomeLogoIn {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 12px 28px rgba(0,0,0,0.35)); }
+            50% { transform: scale(1.02); filter: drop-shadow(0 16px 36px rgba(99,102,241,0.25)); }
         }
         .welcome h2 {
             font-size: clamp(1.15rem, 2.5vw, 1.4rem);
@@ -260,6 +300,18 @@ def index():
         .message-row.bot .message-avatar {
             background: rgba(51,65,85,0.8);
             color: #c7d2fe;
+        }
+        .message-avatar-brand {
+            padding: 4px;
+            background: rgba(30,41,59,0.95) !important;
+            border: 1px solid var(--surface-border);
+            overflow: hidden;
+        }
+        .message-avatar-brand img {
+            width: 22px;
+            height: 22px;
+            object-fit: contain;
+            display: block;
         }
         .message {
             padding: 1rem 1.25rem;
@@ -376,7 +428,7 @@ def index():
         }
 
         @media (max-width: 640px) {
-            .main { padding: 0.5rem; height: calc(100vh - 52px); }
+            .main { padding: 0.5rem; }
             .card { border-radius: 16px; }
             .messages { padding: 1rem; }
             .message-row { max-width: 95%; }
@@ -390,7 +442,13 @@ def index():
     <div class="bg-canvas"></div>
     <div class="grid-overlay"></div>
     <header class="topbar">
-        <h1>AskOGMS</h1>
+        <div class="brand">
+            <img class="brand-logo" src="{{ url_for('static', filename='gsuLogo.png') }}" width="160" height="40" alt="Georgia State University">
+            <div class="brand-text">
+                <h1>AskOGMS</h1>
+                <span class="brand-sub">Georgia State University</span>
+            </div>
+        </div>
         <a href="/tables">Schema</a>
     </header>
 
@@ -398,7 +456,7 @@ def index():
         <div class="card">
             <div class="messages" id="messages"></div>
             <div class="welcome" id="welcome">
-                <div class="welcome-icon">Q</div>
+                <img class="welcome-logo" src="{{ url_for('static', filename='gsuLogo.png') }}" alt="Georgia State University" width="280" height="72">
                 <h2>Ask your data</h2>
                 <p>Ask questions in plain English and get answers from your OGMS database.</p>
                 <div class="chips">
@@ -410,7 +468,7 @@ def index():
                 </div>
             </div>
             <div class="typing-wrap" id="typing">
-                <div class="message-avatar">A</div>
+                <div class="message-avatar message-avatar-brand"><img src="{{ url_for('static', filename='gsuLogo.png') }}" alt="" width="24" height="24"></div>
                 <div class="typing-dots"><span></span><span></span><span></span></div>
             </div>
             <div class="input-area">
@@ -421,6 +479,7 @@ def index():
             </div>
         </div>
     </main>
+    <footer class="site-footer">Georgia State University</footer>
 
     <script>
         var welcome = document.getElementById('welcome');
@@ -444,8 +503,10 @@ def index():
             if (welcome && welcome.classList) welcome.classList.add('hidden');
             var row = document.createElement('div');
             row.className = 'message-row ' + type;
-            var avatar = type === 'user' ? 'You' : 'OGMS';
-            row.innerHTML = '<div class="message-avatar">' + avatar.charAt(0) + '</div><div class="message">' + escapeHtml(text) + '</div>';
+            var avatarHtml = type === 'user'
+                ? '<div class="message-avatar">U</div>'
+                : '<div class="message-avatar message-avatar-brand"><img src="/static/gsuLogo.png" alt="" width="24" height="24"></div>';
+            row.innerHTML = avatarHtml + '<div class="message">' + escapeHtml(text) + '</div>';
             messagesEl.appendChild(row);
             scrollToBottom();
         }
@@ -611,7 +672,8 @@ def table_descriptions():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AskOGMS - Schema</title>
+    <title>AskOGMS — Schema — Georgia State University</title>
+    <link rel="icon" href="{{ url_for('static', filename='gsuLogo.png') }}" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -621,6 +683,8 @@ def table_descriptions():
             min-height: 100vh;
             color: #e2e8f0;
             line-height: 1.5;
+            display: flex;
+            flex-direction: column;
         }
         .topbar {
             background: linear-gradient(90deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.95) 100%);
@@ -631,14 +695,40 @@ def table_descriptions():
             align-items: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 0;
+        }
+        .brand-logo {
+            height: 38px;
+            width: auto;
+            max-width: min(200px, 38vw);
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+        .brand-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
         .topbar h1 { font-size: 1.25rem; font-weight: 600; }
+        .brand-sub { font-size: 0.7rem; font-weight: 500; color: #94a3b8; letter-spacing: 0.03em; }
         .topbar a { color: #94a3b8; text-decoration: none; padding: 0.5rem 1rem; border-radius: 8px; }
         .topbar a:hover { background: #1e293b; color: #f8fafc; }
+        .site-footer {
+            flex-shrink: 0;
+            text-align: center;
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            background: rgba(15,23,42,0.6);
+        }
         .main {
+            flex: 1;
+            min-height: 0;
             max-width: 900px;
             margin: 0 auto;
+            width: 100%;
             padding: 1.25rem 1rem;
-            min-height: calc(100vh - 56px);
         }
         .search-wrap {
             margin-bottom: 1.25rem;
@@ -720,7 +810,16 @@ def table_descriptions():
     </style>
 </head>
 <body>
-    <header class="topbar"><h1>AskOGMS</h1><a href="/">Chat</a></header>
+    <header class="topbar">
+        <div class="brand">
+            <img class="brand-logo" src="{{ url_for('static', filename='gsuLogo.png') }}" width="160" height="38" alt="Georgia State University">
+            <div class="brand-text">
+                <h1>AskOGMS</h1>
+                <span class="brand-sub">Georgia State University</span>
+            </div>
+        </div>
+        <a href="/">Chat</a>
+    </header>
     <div class="main">
         <div class="search-wrap">
             <input type="text" id="search" placeholder="Search tables..." oninput="filterTables()">
@@ -729,6 +828,7 @@ def table_descriptions():
         <div id="schemaCard"></div>
         <div id="errorMsg" class="error-msg" style="display:none;"></div>
     </div>
+    <footer class="site-footer">Georgia State University</footer>
     <script>
         var allTables = [];
         var selectedTable = null;
