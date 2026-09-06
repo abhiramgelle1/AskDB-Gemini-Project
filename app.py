@@ -1,15 +1,35 @@
 from query_engine import chain_code
 from langchain_community.chat_message_histories import ChatMessageHistory
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, session
 from flask_cors import CORS
 import os
 import csv
+import secrets
+import traceback
 from dotenv import load_dotenv
 
+load_dotenv()
+
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 CORS(app)
 
-history = ChatMessageHistory()
+# In-memory only: one ChatMessageHistory per browser session, keyed by a
+# signed session cookie. Nothing here is persisted to a database, so it's
+# gone on app restart - each session's conversation lasts only as long as
+# this process keeps running.
+_session_histories = {}
+MAX_HISTORY_MESSAGES = 8  # last ~4 exchanges kept in context
+
+
+def _get_history():
+    sid = session.get("sid")
+    if not sid:
+        sid = secrets.token_hex(16)
+        session["sid"] = sid
+    if sid not in _session_histories:
+        _session_histories[sid] = ChatMessageHistory()
+    return _session_histories[sid]
 
 @app.route('/')
 def index():
@@ -449,7 +469,10 @@ def index():
                 <span class="brand-sub">Georgia State University</span>
             </div>
         </div>
-        <a href="/tables">Schema</a>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+            <a href="#" id="newChat">New chat</a>
+            <a href="/tables">Schema</a>
+        </div>
     </header>
 
     <main class="main">
@@ -494,6 +517,14 @@ def index():
                 if (q) { inputEl.value = q; ask(); }
             };
         });
+
+        document.getElementById('newChat').onclick = function(e) {
+            e.preventDefault();
+            fetch('/api/reset', { method: 'POST' }).finally(function() {
+                messagesEl.innerHTML = '';
+                if (welcome && welcome.classList) welcome.classList.remove('hidden');
+            });
+        };
 
         function scrollToBottom() {
             messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -565,13 +596,10 @@ def api():
         if not q:
             return jsonify({"error": "Missing 'question'"}), 400
 
-        history.add_user_message(q)
-        formatted_messages = [
-            {"role": "user" if msg.type == "user" else "assistant", "content": msg.content}
-            for msg in history.messages
-        ]
+        history = _get_history()
+        prior_messages = history.messages[-MAX_HISTORY_MESSAGES:]
 
-        res = chain_code(q, formatted_messages)
+        res = chain_code(q, prior_messages)
 
         if isinstance(res, str):
             answer_text = res
@@ -582,11 +610,29 @@ def api():
         else:
             answer_text = str(res) if res is not None else "No response generated."
 
+        history.add_user_message(q)
         history.add_ai_message(answer_text)
         return jsonify({"answer": answer_text})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        traceback.print_exc()
+        error_str = str(e)
+        if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+            friendly = "The AI service hit its rate limit. Please wait about a minute and try again."
+        elif "ReadTimeout" in error_str or "DEADLINE_EXCEEDED" in error_str or "timeout" in error_str.lower():
+            friendly = "The AI service took too long to respond. Please try again."
+        else:
+            friendly = "Something went wrong answering that question. Please try again."
+        return jsonify({"error": friendly}), 500
+
+
+@app.route('/api/reset', methods=['POST'])
+def api_reset():
+    """Clear this browser session's conversation history (in-memory only)."""
+    sid = session.get("sid")
+    if sid:
+        _session_histories.pop(sid, None)
+    return jsonify({"ok": True})
 
 
 def _get_db_connection():
@@ -881,4 +927,4 @@ def table_descriptions():
     """)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(debug=True, host='127.0.0.1', port=5000, threaded=True)

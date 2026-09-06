@@ -1,6 +1,5 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_community.utilities.sql_database import SQLDatabase
 try:
     from langchain_core.globals import set_llm_cache
@@ -13,8 +12,11 @@ except Exception:
         set_llm_cache(InMemoryCache())
     except Exception:
         pass  # caching optional
+import ast
+import functools
 import os
 import re
+import time
 import warnings
 # Suppress SQLAlchemy cycle warning (e.g. user_roles/users FK); harmless for query generation
 warnings.filterwarnings("ignore", message=".*Cannot correctly sort tables.*unresolvable cycles.*", category=Warning)
@@ -119,7 +121,7 @@ _llm_timeout = int(os.getenv("GEMINI_TIMEOUT", "90"))  # Default 90s for complex
 llm = ChatGoogleGenerativeAI(
     model=_gemini_model,
     temperature=0,
-    max_retries=3,  # Increased retries for timeout recovery
+    max_retries=2,  # was 3; still covers transient 429/503 without tripling worst-case wait
     timeout=_llm_timeout
 )
 print(f"Gemini LLM initialized: {_gemini_model}")
@@ -194,6 +196,26 @@ def log_and_clean_sql(raw: str) -> str:
 execute_query = QuerySQLDatabaseTool(db=db)
 
 
+# Cache schema introspection (DDL + sample rows) - it doesn't change between requests.
+_get_table_info_uncached = db.get_table_info
+
+
+@functools.lru_cache(maxsize=128)
+def _cached_table_info(table_names_key):
+    table_names = list(table_names_key) if table_names_key else None
+    return _get_table_info_uncached(table_names=table_names)
+
+
+def _get_table_info_cached(table_names=None, **kwargs):
+    if kwargs:
+        return _get_table_info_uncached(table_names=table_names, **kwargs)
+    key = tuple(sorted(table_names)) if table_names else None
+    return _cached_table_info(key)
+
+
+db.get_table_info = _get_table_info_cached
+
+
 
 
 
@@ -243,8 +265,6 @@ def format_answer(input_dict: dict) -> str:
     if isinstance(response, dict) and response.get("text"):
         return response["text"]
     return str(response)
-
-rephrase_answer = RunnableLambda(format_answer)
 
 # Load examples from config
 examples = FEW_SHOT_EXAMPLES
@@ -302,6 +322,7 @@ if "_RUN_FIRST" in table_details:
 table_details_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", TABLE_SELECTION_PROMPT),
+            MessagesPlaceholder(variable_name="messages", optional=True),
             ("human", "{question}")
         ]
     )
@@ -325,7 +346,15 @@ def get_tables(table_response: Table) -> List[str]:
     return table_response.name
 
 
-select_table = {"question": itemgetter("question"), "table_details": itemgetter("table_details")} | table_chain | get_tables
+select_table = (
+    {
+        "question": itemgetter("question"),
+        "table_details": itemgetter("table_details"),
+        "messages": itemgetter("messages"),
+    }
+    | table_chain
+    | get_tables
+)
 
 
 
@@ -334,6 +363,7 @@ final_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", SQL_GENERATION_PROMPT),
         few_shot_prompt,
+        MessagesPlaceholder(variable_name="messages", optional=True),
         ("human", "{input}"),
     ]
 )
@@ -451,51 +481,58 @@ This might be because:
     return {**inputs, "result": "Unable to process the query", "query": sql_query if 'sql_query' in locals() else "N/A", "error": "Max retries reached"}
 
 
-# Create the chain with retry logic integrated
-chain = (
-    RunnablePassthrough.assign(table_names_to_use=select_table)
-    | RunnablePassthrough.assign(query=generate_query | RunnableLambda(log_and_clean_sql))
-    | RunnableLambda(execute_query_with_retry)
-    | rephrase_answer
-)
-
-
-# Optimized chain without table selection (faster for simple queries)
-# This skips 1 LLM call and reduces latency by ~30%
-def is_simple_query(question: str) -> bool:
-    """Detect if query is simple enough to skip table selection"""
-    simple_keywords = ['count', 'total', 'how many', 'show', 'list', 'all']
-    return any(keyword in question.lower() for keyword in simple_keywords)
+def _try_extract_single_scalar(result_str: str):
+    """If result_str is a single-row, single-column DB result (e.g. "[(9,)]"),
+    return that value so it can be shown directly without an LLM rewrite.
+    Returns None for anything else, including on parse failure - conservative
+    by design, since None just means "let the LLM handle it" instead."""
+    try:
+        parsed = ast.literal_eval(result_str)
+    except (ValueError, SyntaxError):
+        return None
+    if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], tuple) and len(parsed[0]) == 1:
+        return parsed[0][0]
+    return None
 
 
 def chain_code(q, m=None):
     """
-    Execute the SQL chain to answer a question.
-    Now with integrated retry logic in a single LangChain trace.
-    
-    Args:
-        q (str): The user's question
-        m (list, optional): Message history for context
-    
-    Returns:
-        str: The AI's response
+    Execute the SQL chain to answer a question: table selection -> SQL
+    generation -> execution (with retry) -> answer rewrite. Each step is
+    timed and printed so slow steps are visible in the console.
     """
     if m is None:
         m = []
-    
+
     print(f"Processing: {q[:60]}...")
-    
-    # For simple queries, skip table selection to save ~30% latency
-    if is_simple_query(q):
-        print("Using fast path (no table selection)")
-        fast_chain = (
-            RunnablePassthrough.assign(query=generate_query | RunnableLambda(log_and_clean_sql))
-            | RunnableLambda(execute_query_with_retry)
-            | rephrase_answer
-        )
-        response = fast_chain.invoke({"question": q, "messages": m, "table_details": table_details})
+    base_input = {"question": q, "messages": m, "table_details": table_details}
+
+    t0 = time.time()
+    table_names_to_use = select_table.invoke(base_input)
+    print(f"[timing] table selection: {time.time() - t0:.1f}s -> {table_names_to_use}")
+
+    t1 = time.time()
+    raw_sql = generate_query.invoke({**base_input, "table_names_to_use": table_names_to_use})
+    sql_query = log_and_clean_sql(raw_sql)
+    print(f"[timing] SQL generation: {time.time() - t1:.1f}s")
+
+    t2 = time.time()
+    exec_result = execute_query_with_retry({
+        **base_input,
+        "table_names_to_use": table_names_to_use,
+        "query": sql_query,
+    })
+    print(f"[timing] SQL execution (incl. correction retries): {time.time() - t2:.1f}s")
+
+    scalar = None if exec_result.get("error") else _try_extract_single_scalar(exec_result.get("result", ""))
+    if scalar is not None:
+        response = f"Answer: {scalar}"
+        print("[timing] answer generation: 0.0s (skipped LLM - single-value result)")
     else:
-        response = chain.invoke({"question": q, "messages": m, "table_details": table_details})
-    
+        t3 = time.time()
+        response = format_answer(exec_result)
+        print(f"[timing] answer generation: {time.time() - t3:.1f}s")
+    print(f"[timing] TOTAL: {time.time() - t0:.1f}s")
+
     return response
 
